@@ -1,6 +1,4 @@
 platform:
-  security:
-    enabled: false
   datasource:
     writer:
       url: ${DB_WRITER_URL:jdbc:postgresql://localhost:5432/appdb}

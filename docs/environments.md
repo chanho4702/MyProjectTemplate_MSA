@@ -22,6 +22,8 @@
 
 `prod`가 `local`을 include하지 않는다. 운영 값은 이미지에 굽지 않고 런타임 환경과 Secret Manager에서 주입한다.
 
+Gateway의 `SAMPLE_SERVICE_URI`, OIDC issuer와 활성화 값, 선택한 Redis·Kafka·Elasticsearch의 주소·운영 자격증명은 dev/prod에서 기본값이 없다. 선택형 서비스 생성기는 기능별 `application-platform-<feature>.yml`을 만들고 prod 문서에는 localhost, 로컬 비밀번호 또는 보안 비활성화 기본값을 넣지 않는다. 누락된 필수 값은 해당 기능이 구성될 때 기동 실패로 드러난다.
+
 프론트 SPA는 시작 시 `app-config.json`을 읽는다. 기본 빈 `apiBaseUrl`은 같은 origin의 `/api`를 사용하며, dev/prod에서 외부 Gateway URL이 필요하면 환경별 런타임 파일로 주입한다. OIDC는 `auth.enabled`로 독립적으로 켜고, authority와 Gateway issuer를 환경마다 맞춘다. prod 설정은 API·OIDC URL의 localhost, 평문 HTTP, URL 내부 자격증명과 client secret을 허용하지 않는다. 자세한 경계는 [ADR 0002](adr/0002-frontend-runtime-boundary.md)와 [ADR 0003](adr/0003-spa-oidc-public-client.md)을 따른다.
 
 ## 운영 배포 권고

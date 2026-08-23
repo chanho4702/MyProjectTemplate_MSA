@@ -216,7 +216,7 @@ Invoke-RestMethod http://localhost:8081/api/v1/items `
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Java\jdk-21'
 $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
-./gradlew :services:gateway-service:bootRun
+./gradlew :services:gateway-service:bootRun --args='--spring.profiles.active=local'
 ```
 
 다른 터미널에서 Gateway 경유 요청을 확인한다.
@@ -229,7 +229,7 @@ Invoke-RestMethod http://localhost:8080/api/v1/items
 
 ```powershell
 $env:SERVER_PORT='8082'
-./gradlew :services:gateway-service:bootRun
+./gradlew :services:gateway-service:bootRun --args='--spring.profiles.active=local'
 ```
 
 이때 확인 주소도 `http://localhost:8082/api/v1/items`로 바뀐다. Prometheus 기본 설정은 Gateway `8080`을 수집하므로, 장기적으로 `8082`를 사용할 경우 `infra/observability/prometheus.yml`의 Gateway 포트도 함께 맞춰야 한다.
@@ -294,8 +294,15 @@ docker compose --env-file infra/.env.versions -f infra/compose.yml config
 
 ```powershell
 cd tools/configurator
+npm run lint
 npm test
 cd ../..
+```
+
+서비스 생성기와 prod 설정 계약 검증:
+
+```powershell
+pnpm tools:test
 ```
 
 부하 시나리오 계약 검증:
@@ -334,6 +341,22 @@ cd ../..
 ```
 
 생성 결과는 `generated/`에서 확인한다.
+
+- `application-features.env`: Redis/Kafka/Search/OIDC/Gateway 인증/관측성 활성화 값
+- `compose-command.txt`: 선택한 로컬 Compose profile 실행 명령
+- `selection.md`: 선택 요약과 비보장 안내
+
+새 서비스 생성 시 PowerShell과 Bash 모두 같은 설정 파일을 사용할 수 있다.
+
+```powershell
+./tools/new-service.ps1 -Name order-service -BasePackage com.acme.order -ConfigPath ./template-config.json
+```
+
+```bash
+./tools/new-service.sh order-service com.acme.order ./template-config.json
+```
+
+두 생성기 모두 설정 파일을 `config/template-config.schema.json`으로 검증한 뒤 생성한다. Bash 생성기는 검증에 Node.js 22+가 필요하며, Node.js가 없으면 설정 파일을 지정했을 때 생성 없이 오류로 종료한다.
 
 ## 11단계 — 안전하게 종료하기
 

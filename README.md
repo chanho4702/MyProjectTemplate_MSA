@@ -105,7 +105,7 @@ curl http://localhost:8081/api/v1/items
 다른 터미널에서 Gateway를 실행한다.
 
 ```powershell
-./gradlew :services:gateway-service:bootRun
+./gradlew :services:gateway-service:bootRun --args='--spring.profiles.active=local'
 curl http://localhost:8080/api/v1/items
 ```
 
@@ -213,7 +213,7 @@ starter를 의존성에 추가하고 기능 스위치를 켰을 때만 외부 �
 | `platform-starter-kafka` | `platform.kafka.enabled=true` | event envelope, publisher, idempotent producer |
 | `platform-starter-search` | `platform.search.enabled=true` | 검색 포트와 Elasticsearch adapter |
 | `platform-starter-security` | `platform.security.enabled=true` | JWT/OIDC resource server |
-| `platform-starter-observability` | 의존성 기반 | Prometheus, tracing, OTLP |
+| `platform-starter-observability` | `platform.observability.enabled=true` | Prometheus, tracing, OTLP |
 
 모든 기능을 강제로 포함하는 `starter-all`은 제공하지 않는다.
 
@@ -308,6 +308,17 @@ TPS만 기록하지 않는다. Git SHA, 인스턴스 사양, 데이터 크기, p
 
 Redis failover, Kafka broker 장애·재처리, Elasticsearch 대량 색인, Kubernetes 다중 AZ는 아직 검증하지 않았다. 전체 근거와 비보장 범위는 [검증 기록](docs/verification.md)에 있다.
 
+2026-08-20에는 선택형 생성과 운영 설정 계약을 다시 검증했다.
+
+| 검증 | 결과 |
+|---|---|
+| PowerShell/Bash 서비스 생성기 선택 동등성 | 통과 |
+| security·observability 명시적 활성화와 adapter 자동 구성 회귀 | 통과 |
+| prod localhost·로컬 비밀번호·보안 비활성화 기본값 금지 | 통과 |
+| Gradle, Compose, 구성기 lint/test, 프론트와 Chromium E2E | 통과 |
+
+이 검증은 설정 생성과 정적 안전 계약을 확인한 것이며, 운영 Secret의 유효성이나 외부 인프라 연결 성공을 보장하지 않는다.
+
 ## 저장소 구조
 
 ```text
@@ -335,7 +346,11 @@ MyProjectTemplate/
 ./gradlew :services:order-service:test
 ```
 
-생성기는 `template-config.json`을 읽어 선택된 starter만 `build.gradle`에 추가하고, 루트 Gradle 설정은 새 서비스를 자동 발견한다.
+```bash
+./tools/new-service.sh order-service com.acme.order template-config.json
+```
+
+PowerShell과 Bash 생성기는 모두 `template-config.json`을 JSON Schema로 검증한 뒤 선택된 starter만 `build.gradle`에 추가한다. Bash 생성기의 검증에는 Node.js 22+가 필요하다. 선택된 기능의 local/dev/prod 설정은 `application-platform-<feature>.yml`로 함께 생성되며, 루트 Gradle 설정은 새 서비스를 자동 발견한다. `pnpm tools:test`는 두 생성기의 결과와 prod 안전 계약을, `pnpm tools:test:generated-build`는 생성 조합의 실제 Gradle 빌드를 검사한다.
 
 ## 로드맵
 
@@ -372,6 +387,7 @@ MyProjectTemplate/
 - [처리량과 가용성 검증](docs/capacity-testing.md)
 - [검증 기록](docs/verification.md)
 - [전체 로드맵](docs/roadmap.md)
+- [남은 작업 인수인계](docs/remaining-work.md)
 
 ## 설계 원칙과 비보장
 

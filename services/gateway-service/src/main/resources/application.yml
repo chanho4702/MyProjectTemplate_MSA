@@ -11,7 +11,7 @@ spring:
         webflux:
           routes:
             - id: sample-service
-              uri: ${SAMPLE_SERVICE_URI:http://localhost:8081}
+              uri: ${SAMPLE_SERVICE_URI:${platform.gateway.sample-service-uri}}
               predicates:
                 - Path=/api/v1/items/**
               filters:

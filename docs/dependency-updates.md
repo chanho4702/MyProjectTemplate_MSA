@@ -81,9 +81,11 @@ $env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
 docker compose --env-file infra/.env.versions -f infra/compose.yml config
 
 Set-Location tools\configurator
+npm run lint
 npm test
 Set-Location ..\..
 
+pnpm tools:test
 pnpm frontend:check
 ```
 
@@ -151,4 +153,3 @@ major 업데이트가 필요하면 별도 브랜치에서 마이그레이션 문
 - [GitHub Dependabot PR 수 최적화 공식 문서](https://docs.github.com/en/code-security/tutorials/secure-your-dependencies/optimizing-pr-creation-version-updates)
 - [자동 테스트와 설정 검증](verification.md)
 - [환경별 안전 규칙](environments.md)
-

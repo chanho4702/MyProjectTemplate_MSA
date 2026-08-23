@@ -12,6 +12,7 @@ dependencyManagement {
 dependencies {
     api 'org.springframework.kafka:spring-kafka'
     api 'com.fasterxml.jackson.core:jackson-databind'
+    api 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     api 'org.springframework.boot:spring-boot-autoconfigure'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 

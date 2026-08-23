@@ -18,7 +18,8 @@
 ```bash
 ./gradlew test
 docker compose --env-file infra/.env.versions -f infra/compose.yml config
-cd tools/configurator && npm test
+cd tools/configurator && npm run lint && npm test
+cd ../.. && pnpm tools:test
 pnpm frontend:check
 pnpm web:e2e
 ```

@@ -21,6 +21,7 @@
 7. [환경 전략](environments.md)
 8. [처리량과 가용성 단계별 가이드](capacity-testing.md)
 9. [검증 기록과 아직 보장하지 않는 범위](verification.md)
+10. [남은 작업 인수인계](remaining-work.md)
 
 ## 전체 문서 지도
 
@@ -38,6 +39,7 @@
 - [버전과 업그레이드 정책](version-policy.md)
 - [로드맵](roadmap.md)
 - [검증 기록](verification.md)
+- [남은 작업 인수인계](remaining-work.md)
 
 ## 변경 시 동기화 규칙
 

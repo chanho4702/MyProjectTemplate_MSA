@@ -1,0 +1,29 @@
+platform:
+  search:
+    enabled: ${SEARCH_ENABLED:true}
+    index-prefix: ${SEARCH_INDEX_PREFIX:${spring.application.name}}
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS}
+    username: ${ELASTICSEARCH_USERNAME}
+    password: ${ELASTICSEARCH_PASSWORD}

@@ -16,7 +16,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class PlatformSecurityAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
-    @ConditionalOnProperty(prefix = "platform.security", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "platform.security", name = "enabled", havingValue = "true")
     SecurityFilterChain platformSecurityFilterChain(
             HttpSecurity http,
             PlatformSecurityProperties properties
@@ -33,7 +33,7 @@ public class PlatformSecurityAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
-    @ConditionalOnProperty(prefix = "platform.security", name = "enabled", havingValue = "false")
+    @ConditionalOnProperty(prefix = "platform.security", name = "enabled", havingValue = "false", matchIfMissing = true)
     SecurityFilterChain platformLocalPermitAllSecurityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())

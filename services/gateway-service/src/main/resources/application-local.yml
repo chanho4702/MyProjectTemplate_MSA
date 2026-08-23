@@ -1,0 +1,4 @@
+platform:
+  gateway:
+    sample-service-uri: http://localhost:8081
+    security-enabled: ${GATEWAY_SECURITY_ENABLED:false}

@@ -5,6 +5,7 @@ server:
 spring:
   application:
     name: __SERVICE_NAME__
+  # __OPTIONAL_CONFIG_IMPORTS__
   lifecycle:
     timeout-per-shutdown-phase: 20s
   jpa:

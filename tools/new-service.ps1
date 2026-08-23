@@ -38,26 +38,46 @@ if ($ConfigPath) {
     $resolvedConfig = Join-Path $repoRoot 'template-config.json'
 }
 
-$optionalStarters = @()
+$featureDefinitions = @(
+    [PSCustomObject]@{ ConfigKey = 'redis'; Starter = "implementation project(':starters:platform-starter-redis')"; Resource = 'redis.yml'; Target = 'application-platform-redis.yml' },
+    [PSCustomObject]@{ ConfigKey = 'kafka'; Starter = "implementation project(':starters:platform-starter-kafka')"; Resource = 'kafka.yml'; Target = 'application-platform-kafka.yml' },
+    [PSCustomObject]@{ ConfigKey = 'elasticsearch'; Starter = "implementation project(':starters:platform-starter-search')"; Resource = 'search.yml'; Target = 'application-platform-search.yml' },
+    [PSCustomObject]@{ ConfigKey = 'oidc'; Starter = "implementation project(':starters:platform-starter-security')"; Resource = 'security.yml'; Target = 'application-platform-security.yml' },
+    [PSCustomObject]@{ ConfigKey = 'observability'; Starter = "implementation project(':starters:platform-starter-observability')"; Resource = 'observability.yml'; Target = 'application-platform-observability.yml' }
+)
+$selectedFeatures = @()
 if ($resolvedConfig) {
-    $selection = Get-Content -Raw -LiteralPath $resolvedConfig | ConvertFrom-Json
-    if ($selection.features.redis) {
-        $optionalStarters += "implementation project(':starters:platform-starter-redis')"
+    $configJson = Get-Content -Raw -LiteralPath $resolvedConfig
+    $schemaPath = Join-Path $repoRoot 'config\template-config.schema.json'
+    if (-not ($configJson | Test-Json -SchemaFile $schemaPath -ErrorAction Stop)) {
+        throw "Configuration does not match $schemaPath"
     }
-    if ($selection.features.kafka) {
-        $optionalStarters += "implementation project(':starters:platform-starter-kafka')"
-    }
-    if ($selection.features.elasticsearch) {
-        $optionalStarters += "implementation project(':starters:platform-starter-search')"
-    }
+    $selection = $configJson | ConvertFrom-Json
+    $selectedFeatures = $featureDefinitions | Where-Object { $selection.features.($_.ConfigKey) -eq $true }
 }
+$optionalStarters = @($selectedFeatures | ForEach-Object { $_.Starter })
 $optionalStarterBlock = if ($optionalStarters.Count -gt 0) {
     $optionalStarters -join "`r`n    "
 } else {
     '// No optional platform starters selected.'
 }
+$configImportBlock = if ($selectedFeatures.Count -gt 0) {
+    $imports = $selectedFeatures | ForEach-Object { "      - classpath:$($_.Target)" }
+    "  config:`r`n    import:`r`n" + ($imports -join "`r`n")
+} else {
+    ''
+}
 
 Copy-Item -LiteralPath $templateRoot -Destination $destination -Recurse
+$featureTemplateRoot = Join-Path $repoRoot 'templates\service-features'
+foreach ($feature in $selectedFeatures) {
+    $source = Join-Path $featureTemplateRoot $feature.Resource
+    $target = Join-Path $destination "src\main\resources\$($feature.Target)"
+    if (-not (Test-Path -LiteralPath $source)) {
+        throw "Feature configuration template was not found: $source"
+    }
+    Copy-Item -LiteralPath $source -Destination $target
+}
 
 foreach ($sourceSet in @('main', 'test')) {
     $javaRoot = Join-Path $destination "src\$sourceSet\java"
@@ -75,6 +95,7 @@ Get-ChildItem -LiteralPath $destination -File -Recurse | ForEach-Object {
     $content = $content.Replace('__BASE_PACKAGE__', $BasePackage)
     $content = $content.Replace('__CLASS_NAME__', $className)
     $content = $content.Replace('// __OPTIONAL_STARTERS__', $optionalStarterBlock)
+    $content = $content.Replace('  # __OPTIONAL_CONFIG_IMPORTS__', $configImportBlock)
     [System.IO.File]::WriteAllText($_.FullName, $content, $utf8)
 
     if ($_.Name.Contains('__CLASS_NAME__')) {

@@ -5,7 +5,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $resolvedConfig = (Resolve-Path -LiteralPath $ConfigPath).Path
-$config = Get-Content -Raw -LiteralPath $resolvedConfig | ConvertFrom-Json
+$configJson = Get-Content -Raw -LiteralPath $resolvedConfig
+$schemaPath = Join-Path $repoRoot 'config\template-config.schema.json'
+if (-not ($configJson | Test-Json -SchemaFile $schemaPath -ErrorAction Stop)) {
+    throw "Configuration does not match $schemaPath"
+}
+$config = $configJson | ConvertFrom-Json
 
 if ($config.project.name -notmatch '^[a-z][a-z0-9-]{2,39}$') {
     throw 'project.name must use kebab-case and contain 3 to 40 characters.'
@@ -44,7 +49,10 @@ $environmentLines = @(
     "FRONTEND_MODE=$frontendMode",
     "REDIS_ENABLED=$($config.features.redis.ToString().ToLowerInvariant())",
     "KAFKA_ENABLED=$($config.features.kafka.ToString().ToLowerInvariant())",
-    "SEARCH_ENABLED=$($config.features.elasticsearch.ToString().ToLowerInvariant())"
+    "SEARCH_ENABLED=$($config.features.elasticsearch.ToString().ToLowerInvariant())",
+    "SECURITY_ENABLED=$($config.features.oidc.ToString().ToLowerInvariant())",
+    "GATEWAY_SECURITY_ENABLED=$($config.features.oidc.ToString().ToLowerInvariant())",
+    "OBSERVABILITY_ENABLED=$($config.features.observability.ToString().ToLowerInvariant())"
 )
 if ($config.features.readWriteSplit) {
     $environmentLines += 'DB_READER_URL=jdbc:postgresql://localhost:5434/appdb'

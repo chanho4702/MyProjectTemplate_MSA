@@ -1,0 +1,3 @@
+platform:
+  observability:
+    enabled: ${OBSERVABILITY_ENABLED:true}

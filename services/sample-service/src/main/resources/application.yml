@@ -36,6 +36,8 @@ platform:
   search:
     enabled: ${SEARCH_ENABLED:false}
     index-prefix: ${SEARCH_INDEX_PREFIX:sample}
+  observability:
+    enabled: ${OBSERVABILITY_ENABLED:true}
 
 management:
   metrics:

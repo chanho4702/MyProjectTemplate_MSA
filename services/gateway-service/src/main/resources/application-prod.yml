@@ -1,6 +1,6 @@
 platform:
   gateway:
-    security-enabled: true
+    security-enabled: ${GATEWAY_SECURITY_ENABLED}
 
 spring:
   security:

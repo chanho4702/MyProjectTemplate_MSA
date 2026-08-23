@@ -7,7 +7,7 @@ import java.util.List;
 
 @ConfigurationProperties("platform.security")
 public class PlatformSecurityProperties {
-    private boolean enabled = true;
+    private boolean enabled;
     private List<String> publicPaths = new ArrayList<>(List.of(
             "/actuator/health",
             "/actuator/health/**",

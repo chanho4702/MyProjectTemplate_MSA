@@ -1,6 +1,4 @@
 platform:
-  security:
-    enabled: ${SECURITY_ENABLED:true}
   datasource:
     writer:
       url: ${DB_WRITER_URL}
@@ -10,10 +8,3 @@ platform:
       url: ${DB_READER_URL:}
       username: ${DB_READER_USERNAME:${DB_USERNAME}}
       password: ${DB_READER_PASSWORD:${DB_PASSWORD}}
-
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${OIDC_ISSUER_URI}
