@@ -18,5 +18,14 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": [
+    "src",
+    "e2e",
+    "e2e-oidc",
+    "e2e-image",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.oidc.config.ts",
+    "playwright.image.config.ts"
+  ]
 }

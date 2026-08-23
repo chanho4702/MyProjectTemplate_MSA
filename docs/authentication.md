@@ -120,7 +120,7 @@ $env:JAVA_HOME='C:\Program Files\Java\jdk-21'
 $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
 $env:GATEWAY_SECURITY_ENABLED='true'
 $env:SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI='http://localhost:8180/realms/template'
-./gradlew :services:gateway-service:bootRun
+./gradlew :services:gateway-service:bootRun --args='--spring.profiles.active=local'
 ```
 
 로그인하지 않은 API가 거부되는지 확인한다. PowerShell은 401을 오류로 표시하는 것이 정상이다.
@@ -237,4 +237,22 @@ cd D:\MyProjectTemplate
 pnpm frontend:check
 ```
 
-이 검증은 비활성 상태에서 OIDC module을 만들지 않는지, callback 처리, expired token 갱신, Bearer header, 미로그인 API 차단, runtime secret 거부와 production build의 분리 chunk를 확인한다. 실제 IdP redirect는 브라우저·Keycloak·Gateway가 모두 필요한 통합 검증이므로 배포 환경별 smoke를 추가로 수행한다.
+이 검증은 비활성 상태에서 OIDC module을 만들지 않는지, callback 처리, expired token 갱신, Bearer header, 미로그인 API 차단, runtime secret 거부와 production build의 분리 chunk를 확인한다.
+
+실제 IdP redirect까지 포함하는 브라우저 통합 E2E는 별도 명령으로 실행한다.
+
+```powershell
+cd D:\MyProjectTemplate
+$env:JAVA_HOME='C:\Program Files\Java\jdk-21'
+pnpm web:e2e:oidc
+```
+
+`tools/e2e/run-oidc-e2e.mjs`가 전용 포트(15432/18180/18081/18082/14173)에 PostgreSQL, Keycloak, sample-service, Gateway(인증 켬)와 SPA preview를 격리 실행한 뒤 실제 Chromium으로 다음을 검증하고 전부 정리한다.
+
+- `local-user` 로그인 → callback → Bearer token으로 보호 API GET/POST
+- refresh token 기반 silent renew: 만료(20초 수명)를 지나도 재로그인 없이 새 token으로 통과
+- 로그아웃 뒤 보호 API 차단 화면 복귀
+- Gateway의 무토큰·위조 token·다른 realm(issuer 불일치) token 401 거부
+- 같은 token의 만료 후 401 거부 — Spring Security 기본 clock skew 60초 때문에 수명 + 60초 이후에 판정한다
+
+Docker, Java 21, pnpm과 Playwright Chromium(`pnpm web:e2e:install`)이 필요하다. 기본 로컬 스택(5432/8180/8080/8081)은 건드리지 않으며, realm은 짧은 token 수명과 E2E redirect URI를 더한 파생 사본을 임시 디렉토리에 만들어 사용한다. 같은 검증이 CI의 `oidc-e2e` job에서도 실행된다. 이 E2E는 local Keycloak 전용 계정만 사용하고 운영 Secret을 저장하지 않는다. dev/prod IdP의 HTTPS·MFA·사용자 lifecycle은 여전히 배포 환경별 smoke가 필요하다.
