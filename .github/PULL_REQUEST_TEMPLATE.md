@@ -6,7 +6,8 @@
 
 - [ ] 영향받는 Gradle 테스트
 - [ ] Compose 구성 검증
-- [ ] 구성기 변경 시 `npm test`
+- [ ] 구성기 변경 시 `npm run lint`와 `npm test`
+- [ ] 생성기/설정 변경 시 `pnpm tools:test`
 
 ## 문서 동기화
 

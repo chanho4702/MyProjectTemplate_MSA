@@ -253,3 +253,94 @@ E2E는 `vite build` 산출물을 `vite preview`로 띄우고 실제 Chromium에�
 - Chromium 외 브라우저와 모바일 viewport
 - 시각 회귀(스크린샷 비교)
 - 프론트 독립 컨테이너와 운영 ingress/CORS
+
+## 2026-08-20 선택형 생성과 운영 설정 계약 검증
+
+구성 마법사의 `redis`, `kafka`, `elasticsearch`, `oidc`, `observability` 선택이 서비스 dependency와 Spring 설정에 함께 반영되도록 생성기를 보완한 뒤 검증했다.
+
+| 대상 | 결과 | 확인 내용 |
+|---|---|---|
+| Gradle 전체 프로젝트 | 통과 | 모든 starter와 서비스 테스트, security/observability 명시적 활성화와 adapter 자동 구성 회귀 포함 |
+| PowerShell/Bash 생성기 | 통과 | 임시 저장소에서 실제 스크립트를 실행해 동일한 starter와 `application-platform-<feature>.yml` 생성 확인 |
+| 설정 적용 도구 | 통과 | Redis/Kafka/Search/OIDC/Gateway 인증/관측성 활성화 환경변수 생성 |
+| prod 설정 계약 | 통과 | sample-service, Gateway와 기능별 템플릿에 localhost·로컬 비밀번호·보안 비활성화 기본값이 없음을 자동 검사 |
+| 구성 마법사 | 통과 | ESLint, production build와 server render 테스트 |
+| Compose | 통과 | database-ha/cache/messaging/search/identity/observability/capacity-ha 전체 profile 구성 해석 |
+| 부하 하네스 | 통과 | 관측성·capacity proxy와 시나리오/리포트 계약 15건 |
+| 프론트 | 통과 | API client 5건, React 42건, production build, Chromium E2E 12건 |
+
+observability starter는 `platform.observability.enabled=true`일 때만 exporter 구성을 유지한다. 값이 없거나 false이면 Prometheus·OTLP metrics, tracing과 OTLP logging exporter를 비활성화한다. security starter도 값이 없으면 JWT 보호를 자동 활성화하지 않고, 명시적으로 true인 경우에만 resource server chain을 만든다.
+
+prod 계약 테스트는 위험한 기본값의 재유입을 막는 정적 검증이다. 실제 운영 Secret이 유효한지, 관리형 Redis·Kafka·Elasticsearch와 TLS/인증 연결이 성공하는지, 실제 IdP와 Gateway 인증 E2E가 동작하는지는 배포 환경에서 별도로 검증해야 한다.
+
+## 2026-08-23 생성 서비스 빌드 계약과 Bash 스키마 검증
+
+`69b6b9f` 위 작업 트리에서 P0-A(생성기 변경 마무리)를 적용한 뒤 검증했다. 환경: Windows 11, JDK 21, Node.js 24.16.0, pnpm 11.10.0, PowerShell 7.6.5, Git Bash.
+
+| 대상 | 결과 | 확인 내용 |
+|---|---|---|
+| Bash 생성기 수정 | 통과 | 기능 선택 시 `spring.config.import` 상위 키(`config:`/`import:`) 없이 깨진 YAML을 만들던 버그를 수정하고 회귀 검사를 추가 |
+| Bash JSON Schema 검증 | 통과 | `tools/lib/validate-template-config.mjs`(Node.js, 외부 의존성 없음)로 생성 전 스키마 검증, 위반 경로 출력 후 파일 미생성 종료 |
+| 검증기 계약 | 7건 통과 | 필수 속성, type/const/enum/pattern, 추가 속성 금지, 수치 범위, 중복 environments, 잘못된 JSON, 저장소 예제 설정 |
+| 생성기 계약 | 6건 통과 | PS/Bash 정상 생성 2건, PS/Bash 스키마 위반 거부 2건(생성물 없음 확인), 기능 스위치 env, prod 위험 기본값 부재 |
+| 생성 서비스 선택 계약 | 통과 | PS/Bash × none·기능별 단독 5종·전체 = 14개 서비스에서 placeholder 부재, 선택한 starter·`application-platform-<feature>.yml`·import만 존재 |
+| PS↔Bash 동등성 | 통과 | 조합별로 파일 목록과 정규화(개행·이름 토큰) 내용 일치 |
+| 생성 서비스 Gradle 빌드 | 통과 | 7개 조합 전부 Java 21에서 `:services:<name>:test` 통과 (`pnpm tools:test:generated-build`) |
+| profile 계약(생성 서비스 테스트에 포함) | 통과 | local profile은 localhost 기본값으로 설정 해석, dev/prod는 `DB_WRITER_URL` 미주입 시 placeholder 해석 단계에서 fail-fast |
+| observability 실제 기동 | 통과 | `SpringApplication` 실기동에서 flag 미설정 시 Prometheus registry·OTLP span exporter 부재와 export 플래그 false, `enabled=true`일 때 Prometheus·Tracer·OTLP exporter 생성 |
+| Gradle 전체 프로젝트 | 통과 | JDK 21 `./gradlew test` 전체 starter·서비스 테스트 |
+
+한계와 관찰:
+
+- profile 계약은 `ConfigDataEnvironmentPostProcessor`로 실제 기동과 같은 설정 체인을 해석한 검증이다. 실제 DB에 연결하는 `bootRun` 기동과 Flyway migration은 포함하지 않는다.
+- Spring Boot는 `management.tracing.enabled=false`여도 no-op 성격의 `micrometerOtelTracer` bean을 유지한다. tracing 차단 계약은 Tracer bean 부재가 아니라 span exporter 부재로 검증했다.
+- Bash 생성기는 설정 파일 지정 시 Node.js 22+가 필요하다. 없으면 생성 없이 안내 메시지와 함께 종료한다(요구 사항은 [모듈 카탈로그](module-catalog.md)와 [빠른 시작](quickstart.md)에 기록).
+- CI에 `generated-service-build` job을 추가해 같은 계약을 Linux에서도 실행한다. 이 검증 시점에 CI 실행 자체는 하지 않았다.
+
+## 2026-08-23 실제 IdP 인증 브라우저 E2E
+
+`69b6b9f` 위 작업 트리에서 P0-B(SPA Authorization Code + PKCE 실제 E2E)를 적용해 검증했다. 환경: Windows 11, JDK 21, Docker Desktop, Keycloak 26.4.2, PostgreSQL 17.6, Node.js 24.16.0, Playwright Chromium.
+
+`pnpm web:e2e:oidc`(`tools/e2e/run-oidc-e2e.mjs`)는 전용 포트(15432/18180/18081/18082/14173)에 PostgreSQL·Keycloak·sample-service·Gateway(인증 켬)·SPA preview를 격리 실행하고 실제 Chromium으로 검증한 뒤 컨테이너·프로세스를 정리한다. 브라우저 단계 개입은 정적 `app-config.json` 주입 하나뿐이며 로그인·token 교환·API 호출은 전부 실제 구성요소를 지난다.
+
+| 시나리오 | 결과 | 확인 내용 |
+|---|---|---|
+| 미로그인 차단 | 통과 | 로그인 전 API 미호출, Gateway가 무토큰 요청 401 |
+| 실제 로그인 흐름 | 통과 | Chromium에서 `local-user` 로그인 → `/oidc/callback` → Bearer token으로 GET 200, POST 201과 목록 반영 |
+| token 갱신 | 통과 | 20초 수명 token 만료 후 refresh token 기반 silent renew로 재로그인 없이 다른 token으로 재조회 성공 |
+| 로그아웃 | 통과 | end-session 왕복 뒤 로그인 전 상태 복귀, 보호 API 재차단, 저장 버튼 비활성 |
+| 위조 token 거부 | 통과 | 서명 없는 문자열 Bearer 401 |
+| issuer 불일치 거부 | 통과 | 같은 Keycloak의 master realm이 발급한 정상 서명 token 401 |
+| 만료 token 거부 | 통과 | 2초 수명 client token이 유효 시 200, 만료 후 401 |
+| 전체 오케스트레이션 | 통과 | 깨끗한 상태에서 기동→7건 테스트→정리까지 단일 명령으로 완료, 잔여 컨테이너·포트 없음 |
+| 프론트 회귀 | 통과 | React 단위 42건, stub 기반 Chromium E2E 12건, TypeScript 검사 |
+
+관찰과 한계:
+
+- Spring Security `JwtTimestampValidator`는 기본 60초 clock skew를 허용한다. 만료 거부는 token 수명 + 60초가 지나야 판정되며, 테스트도 65초 대기 후 401을 확인한다.
+- E2E는 `realm-template.json`에서 파생한 임시 realm(짧은 token 수명, E2E 전용 redirect URI, `e2e-short-token` client)을 사용한다. 공유 realm 파일과 기본 로컬 스택(5432/8180/8080/8081)은 변경하지 않는다.
+- 로컬 Keycloak 전용 계정·비밀값만 사용하며 운영 Secret을 저장하지 않는다.
+- CI에 `oidc-e2e` job을 추가했지만 GitHub Actions에서의 첫 실행 결과는 아직 관찰하지 않았다.
+- dev/prod IdP의 HTTPS·exact redirect·MFA·사용자 lifecycle, BFF/HTTP-only cookie와 CSRF adapter는 여전히 검증 범위 밖이다. 프론트 독립 컨테이너와 로컬 ingress는 아래 절에서 검증했다.
+
+## 2026-08-23 프론트 production image와 same-origin ingress smoke
+
+`69b6b9f` 위 작업 트리에서 P1-A(프론트 독립 이미지·ingress)의 로컬 범위를 적용해 검증했다. 환경: Windows 11, Docker Desktop, JDK 21, nginx 1.30.4, Playwright Chromium/Firefox 153.
+
+`pnpm web:image:smoke`(`tools/e2e/run-frontend-image-smoke.mjs`)는 `apps/web/Dockerfile` 이미지를 빌드하고 전용 포트(25432/28081/28082/28090/28091)에 web container → nginx ingress(Compose `frontend` profile) → Gateway → sample-service → PostgreSQL을 격리 실행한 뒤 브라우저 smoke를 실행하고 정리한다.
+
+| 대상 | 결과 | 확인 내용 |
+|---|---|---|
+| production image 빌드 | 통과 | pnpm workspace 빌드 stage + nginx 정적 서빙, `/api` 미프록시 경계 |
+| health 경계 | 통과 | web `/healthz`, ingress `/ingress-health` 200, 이미지 `HEALTHCHECK`와 Compose healthcheck |
+| same-origin 흐름 | 통과 | ingress origin 하나로 SPA 로드와 `/api` GET/POST, 모든 API 요청이 ingress origin, CORS preflight(OPTIONS) 0건 |
+| 환경별 config 재사용 | 통과 | 같은 이미지의 두 container가 서로 다른 mount된 `app-config.json`(local/dev)을 서빙 |
+| 브라우저 범위 | 통과 | 데스크톱 Chromium, 모바일 viewport(Pixel 7), Firefox 각각 same-origin 조회·생성 성공 (6/6) |
+| Compose 계약 | 통과 | `frontend` profile 포함 전체 profile `config --quiet` 해석 |
+
+관찰과 한계:
+
+- node:22.13 base image의 corepack이 회전된 npm 서명 키를 몰라 `corepack prepare`가 실패한다. 이미지 빌드는 `npm install -g pnpm@11.10.0`으로 pnpm을 설치한다.
+- ingress는 로컬 nginx 예제다. Kubernetes ingress/LB manifest, HTTPS와 운영 CDN 조건은 P1-B 범위로 남는다.
+- 스크린샷 기반 시각 회귀는 "필요한 경우" 조건이 아직 확인되지 않아 도입하지 않았다.
+- CI에 `frontend-image-smoke` job을 추가했지만 GitHub Actions에서의 첫 실행 결과는 아직 관찰하지 않았다.
