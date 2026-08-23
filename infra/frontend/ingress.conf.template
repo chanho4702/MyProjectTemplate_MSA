@@ -1,0 +1,28 @@
+# SPA와 Gateway를 한 origin으로 묶는 로컬 ingress 예제다. 브라우저는 이
+# origin 하나만 바라보므로 CORS 정책이 필요 없다. 프론트와 API를 다른
+# origin으로 분리해야 할 때만 Gateway에 명시적 origin·method·header CORS
+# 정책을 추가한다. nginx 이미지의 template 기능이 ${...} 환경변수를 치환한다.
+server {
+    listen 8080;
+    server_name _;
+
+    location = /ingress-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "UP";
+    }
+
+    location /api/ {
+        proxy_pass ${FRONTEND_GATEWAY_ORIGIN};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass ${FRONTEND_WEB_ORIGIN};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

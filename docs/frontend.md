@@ -67,7 +67,7 @@ $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
 cd D:\MyProjectTemplate
 $env:JAVA_HOME='C:\Program Files\Java\jdk-21'
 $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
-./gradlew :services:gateway-service:bootRun
+./gradlew :services:gateway-service:bootRun --args='--spring.profiles.active=local'
 ```
 
 다른 터미널에서 Gateway API가 성공하는지 먼저 확인한다.
@@ -190,6 +190,40 @@ pnpm --filter @myprojecttemplate/web preview
 
 브라우저에서 <http://localhost:4173>을 연다. 이 저장소의 preview 설정도 로컬 `/api`를 Gateway `:8080`으로 전달한다. 실제 운영에서는 Vite preview server를 사용하지 않고 정적 파일 서버/CDN과 Gateway routing을 구성한다.
 
+### production image와 same-origin ingress
+
+`apps/web/Dockerfile`이 SPA production image를 만든다. build stage가 pnpm workspace에서 `vite build`를 실행하고, 런타임은 nginx가 정적 파일만 서빙한다.
+
+```powershell
+cd D:\MyProjectTemplate
+docker build -f apps/web/Dockerfile -t msa-platform-web:local .
+```
+
+이미지 계약:
+
+- `/healthz`가 200을 돌려주는 health 경계다. 이미지 자체 `HEALTHCHECK`도 같은 경로를 사용한다.
+- `/etc/msa-web/app-config.json`을 mount하면 시작 시 그 값이 서빙된다. **같은 불변 이미지를 환경별 `app-config.json`만 바꿔 재사용한다.** mount가 없으면 빌드에 포함된 local 기본값으로 동작한다.
+- `/app-config.json`은 `no-store`, hash가 붙은 `/assets/*`는 불변 캐시로 서빙한다.
+- 이 이미지는 `/api`를 프록시하지 않는다. same-origin 연결은 ingress가 담당한다.
+
+로컬 ingress 예제는 Compose `frontend` profile이다. nginx ingress가 `/`를 web container로, `/api`를 host의 Gateway로 전달해 브라우저는 origin 하나만 본다.
+
+```powershell
+docker compose --env-file infra/.env.versions -f infra/compose.yml `
+  --profile frontend up -d --build --wait
+```
+
+<http://localhost:8090>이 ingress origin이다(`FRONTEND_INGRESS_PORT`로 변경, Gateway가 다른 포트면 `GATEWAY_PORT` 지정). SPA와 API가 같은 origin이므로 CORS 정책이 필요 없다. 프론트와 Gateway를 다른 origin으로 분리해야 할 때만 Gateway에 명시적 origin·method·header CORS 정책을 추가한다.
+
+container → ingress → Gateway → sample-service 전체 경로의 자동 smoke는 다음 명령이 실행한다.
+
+```powershell
+$env:JAVA_HOME='C:\Program Files\Java\jdk-21'
+pnpm web:image:smoke
+```
+
+`tools/e2e/run-frontend-image-smoke.mjs`가 전용 포트(25432/28081/28082/28090/28091)에 격리 스택을 띄우고 데스크톱 Chromium, 모바일 viewport(Pixel 7), Firefox에서 same-origin 조회·생성(CORS preflight 부재 포함), health 경계와 환경별 config 재사용을 검증한 뒤 정리한다. 같은 검증이 CI의 `frontend-image-smoke` job에서도 실행된다.
+
 ## 9. 자동 검증
 
 프론트 전체 검사:
@@ -239,7 +273,7 @@ E2E가 검증하는 것:
 | 인증 켬 | 로그인 전 API 미호출과 OIDC 이동 |
 | 잘못된 설정 | 부팅 오류 화면 |
 
-E2E는 Gateway 응답을 흉내 내므로 Gateway routing, CORS, 실제 OIDC redirect는 검증하지 않는다. 그 부분은 이 문서 3~5절의 수동 절차와 [OIDC 인증 가이드](authentication.md)가 담당한다.
+이 stub E2E는 Gateway 응답을 흉내 내므로 Gateway routing, CORS, 실제 OIDC redirect는 검증하지 않는다. 그 부분은 실제 스택을 띄우는 `pnpm web:e2e:oidc`([OIDC 인증 가이드](authentication.md) 8절)와 `pnpm web:image:smoke`(이 문서 8절)가 담당한다.
 
 ## 10. 자주 생기는 문제
 
@@ -278,8 +312,8 @@ docker compose --env-file infra/.env.versions -f infra/compose.yml down
 ## 아직 구현하지 않은 것
 
 - HTTP-only cookie를 사용하는 BFF adapter와 그에 필요한 CSRF 방어
-- 실제 Gateway·Keycloak을 함께 띄우는 통합 E2E
-- 프론트 독립 컨테이너와 운영 ingress 예제
-- SSR adapter
+- SSR adapter — 실제 SEO·서버 렌더 요구가 확인될 때만 추가한다
+- 스크린샷 기반 시각 회귀 — 픽셀 비교가 필요한 실제 요구가 생기면 추가한다
+- Kubernetes ingress/LB manifest — 로컬 nginx ingress 예제까지만 있고 운영 배포 기반은 P1-B에서 다룬다
 
-브라우저 E2E는 Gateway 응답을 stub으로 대체한다. OIDC redirect의 실제 브라우저·Keycloak·Gateway smoke는 환경별로 수행해야 하며, 단위 테스트와 E2E 통과만으로 운영 인증이 완성됐다고 보지 않는다.
+로컬 E2E와 smoke 통과는 로컬 조건의 검증이다. dev/prod의 HTTPS ingress, 실제 IdP와 CDN 조건은 배포 환경별 smoke로 별도 확인해야 한다.

@@ -1,12 +1,10 @@
 .git
 .gradle
-.idea
-.vscode
 **/build
-**/node_modules
 **/dist
-**/coverage
-tools/configurator
+**/node_modules
+**/test-results
 load-tests/results
-generated
-*.log
+tools/configurator/node_modules
+docs
+*.md

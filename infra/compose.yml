@@ -144,6 +144,43 @@ services:
       retries: 40
     restart: unless-stopped
 
+  web:
+    profiles: [frontend]
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: msa-platform-web:local
+    volumes:
+      - ./frontend/app-config.local.json:/etc/msa-web/app-config.json:ro
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  frontend-ingress:
+    profiles: [frontend]
+    image: ${CAPACITY_PROXY_IMAGE}
+    environment:
+      FRONTEND_WEB_ORIGIN: http://web:8080
+      FRONTEND_GATEWAY_ORIGIN: http://host.docker.internal:${GATEWAY_PORT:-8080}
+    ports:
+      - 127.0.0.1:${FRONTEND_INGRESS_PORT:-8090}:8080
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./frontend/ingress.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8080/ingress-health | grep -q UP"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   prometheus:
     profiles: [observability]
     image: ${PROMETHEUS_IMAGE}
