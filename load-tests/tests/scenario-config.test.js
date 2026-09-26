@@ -57,10 +57,21 @@ test('soak plan requires an explicit target and defaults to four hours', () => {
 
   assert.equal(plan.options.scenarios.soak_read.rate, 75);
   assert.equal(plan.options.scenarios.soak_read.duration, '4h');
+  assert.equal(plan.inputs.writeRatio, 0);
   assert.throws(() => createSoakPlan(environment()), /TARGET_TPS/);
   assert.throws(
     () => createSoakPlan(environment({ TARGET_TPS: '75', DURATION: '0m' })),
     /single k6 duration/,
+  );
+});
+
+test('soak plan accepts an explicit write ratio for a mixed GET/POST request mix', () => {
+  const plan = createSoakPlan(environment({ TARGET_TPS: '75', WRITE_RATIO: '0.1' }));
+
+  assert.equal(plan.inputs.writeRatio, 0.1);
+  assert.throws(
+    () => createSoakPlan(environment({ TARGET_TPS: '75', WRITE_RATIO: '1' })),
+    /WRITE_RATIO must be greater than 0 and less than 1/,
   );
 });
 

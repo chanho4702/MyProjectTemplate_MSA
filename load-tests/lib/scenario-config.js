@@ -207,6 +207,7 @@ export function createSoakPlan(environment) {
   const context = runContext(environment, 'soak');
   const targetTps = positiveNumber(environment, 'TARGET_TPS');
   const testDuration = duration(environment, 'DURATION', '4h');
+  const writeRatio = fraction(environment, 'WRITE_RATIO', 0);
   const thresholdConfig = thresholds(environment);
 
   return {
@@ -214,6 +215,7 @@ export function createSoakPlan(environment) {
     inputs: {
       targetTps,
       duration: testDuration,
+      writeRatio,
       thresholds: thresholdConfig.values,
     },
     options: {

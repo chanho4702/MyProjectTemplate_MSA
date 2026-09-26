@@ -344,3 +344,97 @@ prod 계약 테스트는 위험한 기본값의 재유입을 막는 정적 검�
 - ingress는 로컬 nginx 예제다. Kubernetes ingress/LB manifest, HTTPS와 운영 CDN 조건은 P1-B 범위로 남는다.
 - 스크린샷 기반 시각 회귀는 "필요한 경우" 조건이 아직 확인되지 않아 도입하지 않았다.
 - CI에 `frontend-image-smoke` job을 추가했지만 GitHub Actions에서의 첫 실행 결과는 아직 관찰하지 않았다.
+
+## 2026-08-28 P0-C 4시간 soak와 C1/C2 기준선
+
+이 절은 `82907e3431c494dc342b6ac3d952e510f943ee65` 위 깨끗한 작업 트리(soak 실행 시점 기준)에서 [남은 작업](remaining-work.md)의 P0-C를 실측한 기록이다. `load-tests/soak.js`에 `WRITE_RATIO` 옵션을 추가해 GET/POST 혼합을 지원하도록 확장했다(계약 테스트 포함, [처리량과 가용성 단계별 가이드](capacity-testing.md) 10절에 문서화).
+
+### 실행 환경
+
+| 항목 | 값 |
+|---|---|
+| 기준 SHA | `82907e3431c494dc342b6ac3d952e510f943ee65` |
+| OS·CPU | Windows 11, AMD Ryzen 5 7530U, 논리 프로세서 12개 |
+| 메모리 | 약 29.8 GiB |
+| JDK | 21.0.7 LTS (Temurin), `-Xmx` 등 명시적 heap 상한 없이 기본값 사용 |
+| 토폴로지 | k6 → Gateway(`18082`, `platform.observability.enabled=true`) → capacity-proxy(nginx, `18084`) → sample-service `18081`/`18083`(각 HikariCP pool 10) → PostgreSQL writer(`5432`)/reader(`5434`) |
+| 포트 비고 | Windows `netsh interface ipv4 show excludedportrange`가 `8025-8124`, `8286-8385`를 포함한 Hyper-V 예약 범위로 `8080-8084`를 모두 막고 있어, 문서 기본 포트 대신 `18080`대로 전체 스택을 재배치했다. `infra/capacity/nginx.conf`는 레포를 수정하지 않고 임시 사본으로 `18081`/`18083` upstream을 가리키게 했다. |
+| 관측성 | Prometheus 3.13.1을 기존 `prometheus.yml`(포트 `8080`/`8081` 고정) 대신 `18081`/`18082`/`18083`를 스크레이프하는 임시 설정으로 기존 `prometheus_data` volume에 재기동, Grafana 13.1.0 |
+| 데이터셋 | `items` 테이블에 `INSERT ... SELECT generate_series(1, 10000)`로 10,000행을 벌크 삽입, 기존 2행과 합쳐 10,002행에서 시작 |
+
+### SLO, 목표 TPS와 C1/C2 판정 기준 — 실행 전 확정
+
+`ItemController.findAll()`은 페이지네이션이 없어 매 GET 요청이 전체 행을 직렬화한다(10,002행 기준 응답 약 1.1MB). 이 특성 때문에 기본 knee probe(5→40 TPS, Gateway+capacity-proxy 경유)에서 낮은 rate(5 TPS)는 깨끗했지만 40 TPS 램프업 구간에서 http_req_duration·http_req_failed·dropped_iterations threshold가 모두 깨졌고, 16 TPS(=2배 후보)에서도 실패했다. 이 결과를 근거로 실행 전에 다음을 확정했다.
+
+- SLO(이 실행의 합격 기준, 제품 보장 아님): 오류율 < 0.1%, p95 < 500ms, p99 < 1000ms, dropped iteration = 0.
+- 목표 TPS = **8**. 90초 사전 확인에서 오류율 0%, p95 178.6ms, p99 221.4ms, dropped 0으로 SLO를 만족하는 것을 확인한 뒤 확정했다.
+- C1 판정 기준: 서비스당 2개 배치는 충족하지만 인스턴스별 1~2 vCPU 제한은 적용하지 않았다(호스트 12 vCPU를 프로세스 간 공유). "목표 TPS 2배(16) 30분 유지"를 60초 사전 확인으로 먼저 시험한 결과 threshold가 깨져(아래 표) **C1 기준을 충족하지 못했다**. 정식 30분 실행은 수행하지 않았다.
+- C2 판정 기준: "서비스당 3개 이상" 배치 조건 자체를 충족하지 않는다(2개만 구성). 따라서 장애 제거 실험은 진행하되 **C2 등급도 배치 조건에서 이미 미충족**으로 판정한다.
+- 결론: 이 실행은 C1 또는 C2 등급을 주장하지 않는다. 4시간 soak와 장애 복구 실측 자체가 목적이다.
+
+| 확인 | 목표 TPS | 결과 |
+|---|---:|---|
+| 목표 TPS 90초 사전 확인 | 8 | 오류율 0%, p95 178.6ms, p99 221.4ms, dropped 0 — PASS |
+| 2배 TPS 60초 사전 확인 | 16 | threshold(`dropped_iterations`, `http_req_duration`, `http_req_failed`) 위반 — FAIL, C1 미충족 |
+
+### 앱 인스턴스 1개 제거 — 목표 TPS(8)에서 Gateway 경유
+
+capacity-proxy 뒤 두 sample-service 중 `18083`을 실행 약 25초 뒤 강제 종료하고 재기동했다. 실제 nginx 오류 로그 기준 연결 거부 구간은 약 45초(계획한 15초보다 김 — 재기동 스크립트가 Gradle 데몬을 통해 JVM을 다시 띄우는 데 예상보다 시간이 걸렸다)였다.
+
+| 지표 | 결과 |
+|---|---:|
+| 요청 수 | 716 |
+| 달성 요청률 | 7.94 req/s |
+| 클라이언트 체감 오류율 | 0.000% |
+| p50 | 147.5 ms |
+| p95 | 873.9 ms |
+| p99 | 1,897.0 ms |
+| 최대 지연 | 2,973.0 ms |
+| dropped iteration | 5 / 720 |
+| 초기 threshold | FAIL (`http_req_duration`, `dropped_iterations`) |
+| 제거 인스턴스 재기동 후 | health `UP`, proxy `UP` |
+
+nginx의 `proxy_next_upstream`(2회 재시도, 3초 이내)이 실패한 upstream을 자동으로 다른 인스턴스로 우회해 클라이언트 오류율은 0%를 유지했지만, 재시도 비용이 p95/p99 지연에 그대로 반영됐다. 이 결과는 멱등 GET, 로컬 Nginx round-robin, 단일 PC 조건에서만 유효하다.
+
+### reader 컨테이너 장애 — 목표 TPS(8)에서 Gateway 경유
+
+`findAll()`은 `@Transactional(readOnly = true)`로 reader를 사용한다. 실행 약 25초 뒤 `postgres-reader` 컨테이너를 약 15초 중단했다가 재기동했다.
+
+| 지표 | 결과 |
+|---|---:|
+| 요청 수 | 721 |
+| 달성 요청률 | 8.00 req/s |
+| 오류율 | 27.878% |
+| p50 | 133.5 ms |
+| p95 | 1,005.9 ms |
+| p99 | 1,018.8 ms |
+| 최대 지연 | 1,165.0 ms |
+| dropped iteration | 0 |
+| 초기 threshold | FAIL (`http_req_failed`, `http_req_duration`) |
+| reader 재기동 후 | health `UP`, Gateway 경유 조회 10,002건 정상 |
+
+현재 구현은 reader URL이 비어 있을 때만 시작 시 writer로 fallback하며, 실행 중 reader 연결 장애를 writer로 자동 전환하지 않는다. 단일 로컬 reader를 중단하는 동안 threshold `FAIL`은 스크립트 오류가 아니라 현재 가용성 한계를 측정한 결과다. 관리형 reader endpoint나 DB proxy가 있는 운영 구성에서는 다시 측정해야 한다.
+
+### 4시간 soak — 실행했으나 호스트 경합으로 무효 처리
+
+목표 TPS 8, `WRITE_RATIO=0.1`로 Gateway 경유 4시간 soak를 두 차례 시도했다(첫 시도는 세션 중 중단되어 재시작, 두 번째 시도 `load-tests/results/p0c-soak-4h-r2.json`가 2026-08-28T15:39:41Z에 4시간을 완주했다). 그러나 이 실행 중 같은 PC에서 이 저장소와 무관한 다른 마이크로서비스 스택(`platform-auth`, `platform-keycloak`, `platform-gateway`, `platform-opensearch`, `platform-eureka` 등 십수 개 컨테이너)이 함께 동작하고 있었다.
+
+sample-service의 Prometheus 지표로 확인한 호스트 경합 증거(2026-08-28T11:39Z~15:40Z, 5분 간격):
+
+| 지표 | 최소 | 평균 | 최대 |
+|---|---:|---:|---:|
+| `system_cpu_usage` (호스트 전체) | 0.28 | 0.85 | 1.00 |
+| `process_cpu_usage` (sample-service 자신) | 0.01 | 0.04 | 0.09 |
+
+호스트 CPU의 95% 이상을 이 실행과 무관한 프로세스가 소비했다. 그 결과 k6 요약은 요청 114,877건, 오류율 68.914%, p95 8,459.9ms, p99 11,538.1ms, 최대 30,498.0ms, dropped iteration 324건으로 나왔지만 — 이는 실행 직전 같은 토폴로지에서 확인한 목표 TPS 사전 확인 결과(오류율 0%, p95 178.6ms)와 극단적으로 어긋난다. 이 수치는 템플릿·애플리케이션의 처리 능력이 아니라 **호스트 자원 경합** 하나로 설명된다.
+
+**따라서 이 두 실행 모두 P0-C의 공식 4시간 soak 결과로 사용하지 않는다.** 원본 JSON은 `load-tests/results/p0c-soak-4h.json`, `p0c-soak-4h-r2.json`에 남아 있으나 참고용일 뿐이며, [남은 작업](remaining-work.md)의 4시간 soak 항목은 미완료로 남긴다. 재측정은 이 저장소와 무관한 워크로드가 없는 조용한 호스트에서 다시 수행해야 한다.
+
+### 이 실측으로 아직 말할 수 없는 것
+
+- 깨끗한(호스트 경합 없는) 4시간 soak 결과 — 두 차례 시도 모두 무효 처리했다.
+- C1 또는 C2 등급 충족 — 2배 TPS 유지 사전 확인에서 이미 실패해 명시적으로 미충족 판정했다.
+- vCPU 제한을 실제로 건 컨테이너/cgroup 환경에서의 동일 실측 — 이번 실행은 호스트 코어를 프로세스 간 공유했다.
+- 페이지네이션이 있는 API에서의 동일 실측 — `findAll()`의 무제한 응답 크기가 이번 실행의 지연·오류율에 함께 영향을 준 변수였다.
+- 4시간 이상 또는 다중 AZ 조건에서의 soak
+- Kubernetes 또는 managed load balancer에서의 인스턴스 제거 — 로컬 nginx round-robin 실험만 완료
