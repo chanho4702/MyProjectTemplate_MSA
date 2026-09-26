@@ -8,7 +8,7 @@
 - 2026-08-23에 선택형 생성 마감(P0-A), 실제 IdP 브라우저 E2E(P0-B), 프론트 production image·same-origin ingress(P1-A)까지 커밋했다. 각 검증 결과는 [검증 기록](verification.md)의 2026-08-23 절들에 있다.
 - 2026-08-28에 P0-C를 시도했다. knee/목표 TPS 결정, 인스턴스 제거·reader 장애 실험은 Gateway 경유로 완료했지만, 4시간 soak는 두 차례 모두 같은 PC에서 무관한 다른 마이크로서비스 스택이 함께 실행되며 호스트 CPU를 거의 다 써서(`system_cpu_usage` 평균 85%인데 `process_cpu_usage`는 평균 4%) **무효 처리했다**. 근거와 수치는 [검증 기록](verification.md)의 2026-08-28 절을 본다. P0-C는 여전히 미완료다.
 - 2026-09-26에 `GET /api/v1/items`에 페이지네이션(`page`, `size` 1~200, 기본 50)을 추가하고 OpenAPI 계약·생성 타입·문서를 함께 갱신했다. 쿼리 파라미터 제약 위반은 web starter의 공통 handler가 `VALIDATION_FAILED` Problem Detail로 바꾼다. 2026-08-28까지의 knee·목표 TPS는 무제한 응답 기준이므로 P0-C 재실행 전에 knee probe부터 다시 한다.
-- 2026-09-26에 8월 23일 이후 로컬에만 있던 커밋과 위 변경을 `origin/main`으로 push했다. `generated-service-build`, `oidc-e2e`, `frontend-image-smoke` job의 GitHub Actions 첫 실행 결과는 [검증 기록](verification.md)의 2026-09-26 절에 있다.
+- 2026-09-26에 8월 23일 이후 로컬에만 있던 커밋과 위 변경을 `origin/main`으로 push했다. `generated-service-build`, `oidc-e2e`, `frontend-image-smoke` job은 GitHub Actions 첫 실행에서 모두 통과했다. `configurator` job만 Next.js 16.3.1 critical 권고로 실패해 16.3.6 patch로 올려 해결했다. 세부는 [검증 기록](verification.md)의 2026-09-26 절에 있다. Dependabot PR #17(configurator npm 묶음)과 #16(actions/setup-java 6)은 열려 있으며, #17은 이 patch와 겹치므로 rebase 뒤 CI 결과를 보고 처리한다.
 - 커밋과 배포: 사용자가 별도로 요청하기 전에는 수행하지 않는다.
 - 로컬 환경 주의: 시스템 `JAVA_HOME`은 `C:\java11`을 가리키지만 저장소 기준선은 Java 21이다. 검증 전 `$env:JAVA_HOME='C:\Program Files\Java\jdk-21'`을 지정한다.
 - 로컬 환경 주의: 이 PC는 Hyper-V가 `4116-4215`, `8025-8124`, `8286-8385` 등 TCP 포트 범위를 예약해 Vite preview 기본 포트 `4173`과 서비스 기본 포트 `8080-8084`가 막힌다. `pnpm web:e2e`는 `E2E_PORT=14173`처럼 비어 있는 포트를 지정해 실행한다. 예약 범위는 `netsh interface ipv4 show excludedportrange protocol=tcp`로 확인한다.

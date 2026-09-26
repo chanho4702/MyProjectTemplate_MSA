@@ -468,6 +468,25 @@ sample-service의 Prometheus 지표로 확인한 호스트 경합 증거(2026-08
 
 `pnpm web:e2e:oidc`, `pnpm web:image:smoke`, `pnpm tools:test:generated-build`는 이번 변경이 sample-service 목록 API의 쿼리 파라미터와 web starter handler에 한정되고 응답 shape가 바뀌지 않아 로컬에서는 재실행하지 않았다. 세 항목은 push 후 CI job으로 확인한다.
 
+### push 후 첫 GitHub Actions 실행 (`6d5b07b`, run 36225577615)
+
+8월 23일에 추가한 `generated-service-build`, `oidc-e2e`, `frontend-image-smoke` job이 GitHub Actions에서 처음 실행됐다.
+
+| Job | 결과 | 소요 |
+|---|---|---:|
+| backend | 통과 | 1분 24초 |
+| frontend | 통과 | 15초 |
+| frontend-e2e | 통과 | 1분 |
+| generated-service-build | 통과 | 1분 9초 |
+| oidc-e2e | 통과 | 4분 53초 |
+| frontend-image-smoke | 통과 | 2분 59초 |
+| tooling-contracts, load-test-contracts, compose-contract | 통과 | 각 15초 이내 |
+| configurator | **실패** | 36초 |
+
+`configurator`는 `npm audit --omit=dev`에서 Next.js 16.3.1의 critical 권고 2건(GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4: 인증 없는 원격 코드 실행)과 transitive `sharp`, `baseline-browser-mapping` 권고로 실패했다. 같은 이유로 Dependabot PR #17의 configurator job도 9월 19일부터 실패 중이었다. 이 실패는 이번 코드 변경과 무관하며 lockfile이 8월 이후 갱신되지 않은 결과다.
+
+조치: `npm audit fix --omit=dev`로 transitive 2건을 해결하고, 정확히 고정된 `next`는 `npm install next@16.3.6 --save-exact`로 patch 버전만 올렸다. 이후 `npm audit --omit=dev` 0건, `npm run lint`와 `npm test`(production build + 서버 렌더 HTML 1건) 통과. major 전환은 없다.
+
 ### 이 변경으로 아직 말할 수 없는 것
 
 - 페이지 응답 기준의 knee·목표 TPS — 2026-08-28의 8 TPS는 무제한 응답 기준이므로 P0-C 재실행 시 knee probe부터 다시 한다.
