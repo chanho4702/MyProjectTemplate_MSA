@@ -2,11 +2,14 @@ package dev.platform.starter.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.net.URI;
 import java.util.List;
@@ -35,6 +38,37 @@ final class CommonExceptionHandler {
                 .toList();
         problem.setProperty("violations", violations);
         return problem;
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    ProblemDetail handleParameterValidation(HandlerMethodValidationException exception, HttpServletRequest request) {
+        ProblemDetail problem = problem(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "The request contains invalid values.",
+                request
+        );
+        List<Map<String, String>> violations = exception.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream()
+                        .map(error -> Map.of(
+                                "field", parameterName(result.getMethodParameter()),
+                                "message", error.getDefaultMessage() == null ? "invalid" : error.getDefaultMessage()
+                        )))
+                .toList();
+        problem.setProperty("violations", violations);
+        return problem;
+    }
+
+    private static String parameterName(MethodParameter parameter) {
+        RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+        if (requestParam != null && !requestParam.name().isEmpty()) {
+            return requestParam.name();
+        }
+        if (requestParam != null && !requestParam.value().isEmpty()) {
+            return requestParam.value();
+        }
+        String name = parameter.getParameterName();
+        return name != null ? name : "parameter" + parameter.getParameterIndex();
     }
 
     private static ProblemDetail problem(

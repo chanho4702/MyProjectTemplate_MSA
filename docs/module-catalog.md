@@ -14,6 +14,10 @@ starter는 의존성을 추가해도 위험한 기능을 자동으로 켜지 않
 | `platform-starter-security` | `platform.security.enabled` | JWT/OIDC resource server |
 | `platform-starter-observability` | `platform.observability.enabled` | Prometheus, OTLP tracing |
 
+`platform-starter-data-jpa`의 reader routing은 `platform.datasource.reader.url`이 있을 때만 reader pool을 따로 만든다. 실행 중 reader 장애는 writer로 자동 전환되지 않으므로, 관리형 reader endpoint나 DB proxy가 없으면 reader URL을 비워 두는 편이 안전하다. 근거와 조건은 [권장 아키텍처](architecture.md) 3절을 따른다.
+
+`platform-starter-web`의 공통 handler는 `@Valid` 본문 위반(`MethodArgumentNotValidException`)과 `@RequestParam` 제약 위반(`HandlerMethodValidationException`)을 모두 `VALIDATION_FAILED` Problem Detail로 바꾼다. 쿼리 파라미터 범위 검증은 controller 분기 대신 `@Min`/`@Max`로 선언한다.
+
 security와 observability도 값이 없으면 활성화되지 않는다. observability가 비활성화되면 Prometheus·OTLP metrics, tracing과 OTLP logging exporter를 함께 끄며 health/info 같은 기본 actuator 경계는 web starter에 남는다.
 
 `services/gateway-service`는 외부 진입점과 circuit breaker를 제공한다. 로컬은 정적 URI를 사용하고 운영에서는 서비스 DNS 또는 플랫폼 discovery를 사용한다.

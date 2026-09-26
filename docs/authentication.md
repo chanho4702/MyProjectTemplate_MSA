@@ -216,7 +216,7 @@ local 값을 그대로 복사하지 말고 환경마다 별도 OIDC realm/client
 5. Gateway와 각 서비스의 resource server를 필요에 따라 함께 켠다. Gateway만 검증하면 내부망 우회 호출을 별도 네트워크 정책으로 막아야 한다.
 6. 프론트와 Gateway가 다른 origin이면 Gateway에 허용 origin·method·header를 명시한 CORS 정책이 추가로 필요하다. 같은 origin ingress를 우선한다.
 7. CSP, dependency 점검과 XSS 방어를 운영 배포 조건에 포함한다. sessionStorage도 실행 중인 악성 JavaScript로부터 token을 완전히 보호하지 못한다.
-8. 브라우저에서 token을 다루지 않아야 하는 고위험 서비스라면 HTTP-only 쿠키를 사용하는 BFF adapter를 별도 설계한다. 현재 코드는 BFF나 CSRF 방어를 구현했다고 간주하지 않는다.
+8. 브라우저에서 token을 다루지 않아야 하는 고위험 서비스라면 HTTP-only 쿠키를 사용하는 BFF adapter를 별도 설계한다. 현재 코드는 BFF나 CSRF 방어를 구현했다고 간주하지 않는다. security starter와 Gateway는 Bearer token 전용이라는 전제로 CSRF를 끄고 있으므로, cookie 세션을 도입하는 순간 이 기본값을 다시 켜야 한다.
 
 ## 7. 자주 생기는 문제
 

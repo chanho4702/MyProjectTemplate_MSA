@@ -319,6 +319,8 @@ Redis failover, Kafka broker 장애·재처리, Elasticsearch 대량 색인, Kub
 
 이 검증은 설정 생성과 정적 안전 계약을 확인한 것이며, 운영 Secret의 유효성이나 외부 인프라 연결 성공을 보장하지 않는다.
 
+2026-08-28에는 Gateway 경유 목표 TPS 8에서 인스턴스 제거와 reader 장애를 실측했다. 4시간 soak는 같은 PC의 무관한 워크로드가 호스트 CPU를 점유해 무효 처리했고 C1/C2 등급은 주장하지 않는다. 그 실측에서 무제한 `findAll()`이 병목으로 드러나 2026-09-26에 목록 API를 페이지 응답(`size` 1~200, 기본 50)으로 바꿨다. 자세한 근거는 [검증 기록](docs/verification.md)에 있다.
+
 ## 저장소 구조
 
 ```text
@@ -367,7 +369,8 @@ PowerShell과 Bash 생성기는 모두 `template-config.json`을 JSON Schema로 
 - [x] OpenAPI 기반 TypeScript 타입 생성과 계약 drift 검사
 - [x] 공통 오류·로딩·권한 처리와 Chromium E2E
 - [ ] BFF adapter와 실제 IdP를 함께 띄우는 인증 E2E
-- [ ] 깨끗한 커밋 기준 4시간 soak와 실제 C1/C2 기준선
+- [x] 참조 구현 목록 API 페이지네이션과 쿼리 파라미터 검증 Problem Detail
+- [ ] 깨끗한 커밋 기준 knee 재탐색, 4시간 soak와 실제 C1/C2 기준선
 - [ ] Helm, HPA, PDB, NetworkPolicy, migration/rollback runbook
 - [ ] outbox/CDC, OpenSearch/Valkey, object storage adapter
 

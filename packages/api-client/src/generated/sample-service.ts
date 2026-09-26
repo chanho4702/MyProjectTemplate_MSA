@@ -11,7 +11,10 @@ export interface paths {
             readonly path?: never;
             readonly cookie?: never;
         };
-        /** 저장된 항목 조회 */
+        /**
+         * 저장된 항목 조회
+         * @description 읽기 요청은 `@Transactional(readOnly = true)`로 reader datasource를 사용한다. 응답은 항상 한 페이지로 제한되며 전체 행을 한 번에 반환하지 않는다.
+         */
         readonly get: operations["listItems"];
         readonly put?: never;
         /**
@@ -85,20 +88,34 @@ export type $defs = Record<string, never>;
 export interface operations {
     readonly listItems: {
         readonly parameters: {
-            readonly query?: never;
+            readonly query?: {
+                /** @description 0부터 시작하는 페이지 번호 */
+                readonly page?: number;
+                /** @description 페이지당 항목 수. 상한을 넘으면 400 ValidationProblem을 반환한다. */
+                readonly size?: number;
+            };
             readonly header?: never;
             readonly path?: never;
             readonly cookie?: never;
         };
         readonly requestBody?: never;
         readonly responses: {
-            /** @description 생성 시각의 내림차순으로 정렬된 항목 목록 */
+            /** @description 생성 시각의 내림차순으로 정렬된 요청 페이지의 항목 목록 */
             readonly 200: {
                 headers: {
                     readonly [name: string]: unknown;
                 };
                 content: {
                     readonly "application/json": readonly components["schemas"]["Item"][];
+                };
+            };
+            /** @description page 또는 size 범위 위반 */
+            readonly 400: {
+                headers: {
+                    readonly [name: string]: unknown;
+                };
+                content: {
+                    readonly "application/problem+json": components["schemas"]["ValidationProblem"];
                 };
             };
             readonly 401: components["responses"]["Unauthorized"];

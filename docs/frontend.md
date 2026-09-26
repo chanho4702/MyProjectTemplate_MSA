@@ -289,6 +289,7 @@ E2E가 검증하는 것:
 | 화면에 `로그인 필요` | 인증이 켜졌지만 미로그인 | 상단 로그인 버튼 사용 |
 | 로그인 뒤 redirect 오류 | Keycloak callback 불일치 | `localhost:5173/oidc/callback` exact 등록 |
 | 로그인 뒤에도 401 | Gateway issuer 불일치 | runtime authority와 Gateway issuer를 같은 realm으로 맞춤 |
+| `pnpm web:e2e`가 `listen EACCES 127.0.0.1:4173` | `netsh interface ipv4 show excludedportrange protocol=tcp` | Windows Hyper-V 예약 범위면 `E2E_PORT=14173`처럼 비어 있는 포트를 지정 |
 
 Gateway 기본 포트 `8080`이 충돌해 `8082`로 실행했다면 프론트 터미널에서 다음처럼 로컬 proxy 대상만 바꾼다.
 

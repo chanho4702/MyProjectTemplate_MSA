@@ -438,3 +438,37 @@ sample-service의 Prometheus 지표로 확인한 호스트 경합 증거(2026-08
 - 페이지네이션이 있는 API에서의 동일 실측 — `findAll()`의 무제한 응답 크기가 이번 실행의 지연·오류율에 함께 영향을 준 변수였다.
 - 4시간 이상 또는 다중 AZ 조건에서의 soak
 - Kubernetes 또는 managed load balancer에서의 인스턴스 제거 — 로컬 nginx round-robin 실험만 완료
+
+## 2026-09-26 목록 API 페이지네이션과 push 후 첫 CI
+
+이 절은 2026-08-28 P0-C 실측에서 드러난 무제한 `findAll()` 병목을 참조 구현에서 제거하고, 8월 23일 이후 로컬에만 있던 커밋을 `origin/main`에 push한 기록이다.
+
+### 변경
+
+| 항목 | 내용 |
+|---|---|
+| `GET /api/v1/items` | `page`(0 이상, 기본 0), `size`(1~200, 기본 50) 쿼리 파라미터. `created_at` 내림차순 한 페이지만 반환 |
+| 검증 실패 | `@Min`/`@Max` 위반은 web starter의 `CommonExceptionHandler`가 `HandlerMethodValidationException`을 `VALIDATION_FAILED` Problem Detail(`violations[].field`에 `@RequestParam` 이름)로 변환 |
+| 계약 | `contracts/openapi/sample-service.yaml`에 파라미터와 400 응답 추가, `pnpm api:generate`로 생성 타입 갱신. 응답 본문 shape(`Item[]`)는 유지해 SPA와 API client는 변경 없음 |
+| 테스트 | 테스트 우선으로 작성: `ItemServiceTest`(Pageable 번호·크기·정렬), `ItemControllerContractTest`(기본값 전달, 명시 전달, `size=201`·`page=-1` 400), `CommonExceptionHandlerTest`(Problem Detail 본문) |
+
+### 로컬 검증 (Java 21, Windows 11)
+
+| 검증 | 결과 |
+|---|---|
+| `./gradlew test` | 35건 통과, 실패 0 |
+| `load-tests` `npm test` | 16건 통과 |
+| `pnpm tools:test` | 13건 통과 |
+| `pnpm frontend:check` (api:check drift, typecheck, api-client 5건, web 42건, build) | 통과 |
+| `pnpm web:e2e` | Chromium 12건 통과. 기본 포트 `4173`은 이 PC의 Hyper-V 예약 범위(`4116-4215`)라 `E2E_PORT=14173`으로 실행 |
+| 모든 Compose profile `config --quiet` | 통과 |
+| `git diff --check` | 통과 |
+
+`pnpm frontend:check`의 첫 실행은 Gradle 전체 테스트와 동시에 돌려 web vitest가 unhandled error 5건으로 실패했고, 단독 재실행에서는 42건이 모두 통과했다. 호스트 경합 상황에서 나온 결과라 회귀로 기록하지 않는다.
+
+`pnpm web:e2e:oidc`, `pnpm web:image:smoke`, `pnpm tools:test:generated-build`는 이번 변경이 sample-service 목록 API의 쿼리 파라미터와 web starter handler에 한정되고 응답 shape가 바뀌지 않아 로컬에서는 재실행하지 않았다. 세 항목은 push 후 CI job으로 확인한다.
+
+### 이 변경으로 아직 말할 수 없는 것
+
+- 페이지 응답 기준의 knee·목표 TPS — 2026-08-28의 8 TPS는 무제한 응답 기준이므로 P0-C 재실행 시 knee probe부터 다시 한다.
+- `created_at` 인덱스 유무에 따른 정렬 비용 — 현재 migration에는 인덱스가 없고 10,002행에서는 측정하지 않았다.

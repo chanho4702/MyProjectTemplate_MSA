@@ -1,5 +1,7 @@
 package dev.platform.sample.item;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +27,8 @@ class ItemService {
     }
 
     @Transactional(readOnly = true)
-    List<ItemResponse> findAll() {
-        return repository.findAll().stream().map(ItemResponse::from).toList();
+    List<ItemResponse> findAll(int page, int size) {
+        PageRequest request = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return repository.findAll(request).map(ItemResponse::from).getContent();
     }
 }

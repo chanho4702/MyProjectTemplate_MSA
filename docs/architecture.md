@@ -74,6 +74,17 @@ starter는 안전한 기본값을 위해 다음 규칙을 사용한다.
 
 복제 지연을 허용할 수 없는 잔액, 재고 확정, 권한 변경 직후 조회에는 reader를 사용하지 않는다.
 
+### reader 장애는 자동으로 writer로 넘어가지 않는다
+
+reader fallback은 **기동 시점**에만 일어난다. reader URL이 비어 있으면 reader pool이 writer를 가리키지만, 실행 중 reader 연결이 끊기면 `readOnly=true` 트랜잭션은 그대로 실패한다. 2026-08-28 로컬 실측에서 목표 TPS 8로 Gateway를 경유하는 동안 단일 reader 컨테이너를 약 15초 중단했을 때 오류율 27.9%가 나왔다([검증 기록](verification.md)).
+
+따라서 R/W 분리는 다음 조건에서만 켠다.
+
+- 관리형 reader endpoint나 DB proxy가 reader 장애를 앱 밖에서 흡수한다.
+- 또는 reader 장애 동안 읽기 실패를 허용한다는 SLO 합의가 있다.
+
+둘 다 아니라면 `platform.datasource.reader.url`을 비워 두고 writer 하나로 시작하는 것이 가용성이 더 높다. 실행 중 자동 fallback을 starter에 넣을지는 일관성과 장애 확산 위험을 비교한 ADR로만 결정한다([남은 작업](remaining-work.md) P1-C).
+
 ## 4. 기능별 경계
 
 | 기능 | 애플리케이션 포트 | 기본 구현 | 대체 가능 구현 |
@@ -85,3 +96,22 @@ starter는 안전한 기본값을 위해 다음 규칙을 사용한다.
 | 관측 | Micrometer/OTLP | OTel collector | 상용 APM exporter |
 
 제품이 다른 기술을 쓰더라도 비즈니스 코드의 포트는 유지하고 adapter만 교체한다. 단, Kafka와 Redis Streams처럼 전달 보장이 다른 시스템을 같은 구현으로 취급하지 않는다.
+
+## 5. 참조 구현이 따르는 성능 규칙
+
+`services/sample-service`는 생성기가 복제하는 기준이므로 다음 규칙을 코드로 보여 준다.
+
+- **목록 API는 항상 한 페이지만 반환한다.** `GET /api/v1/items`는 `page`/`size`를 받고 `size`는 1~200, 기본 50이다. 상한을 넘으면 400 Problem Detail을 돌려준다. 전체 행을 직렬화하는 `findAll()`은 두지 않는다. 2026-08-28 실측에서 무제한 `findAll()`이 10,002행에서 약 1.1MB를 매 요청 반환해 knee가 8 TPS로 나온 것이 이 규칙의 근거다.
+- **정렬은 인덱스가 있는 열로 고정한다.** 목록은 `created_at` 내림차순이며, 행 수가 커지면 migration에서 인덱스를 함께 추가한다.
+- **쿼리 파라미터 검증은 Bean Validation으로 한다.** `@Min`/`@Max` 위반은 web starter의 공통 handler가 `VALIDATION_FAILED` Problem Detail로 바꾸므로 controller에 분기를 넣지 않는다.
+
+## 6. 알려진 경계 격차
+
+아래는 설계 결함이 아니라 아직 계약이 없는 지점이다. 새 서비스를 붙일 때 직접 처리해야 한다.
+
+| 격차 | 현재 상태 | 처리 방법 |
+|---|---|---|
+| Gateway route | `gateway-service`의 `application.yml`에 sample-service route 하나만 있다. 서비스 생성기는 route를 추가하지 않는다. | 새 서비스마다 route와 circuit breaker instance를 Gateway 설정에 직접 추가한다. 생성기·Gateway 사이 계약은 [남은 작업](remaining-work.md) P1-D다. |
+| CSRF | security starter와 Gateway는 CSRF를 끈다. Bearer token만 받는 resource server에서는 안전한 기본값이다. | HTTP-only cookie 세션이나 BFF를 붙이면 이 기본값을 그대로 쓰면 안 된다. [ADR 0003](adr/0003-spa-oidc-public-client.md)의 BFF 조건과 함께 CSRF 방어를 다시 켠다. |
+| 검색 포트 | `SearchGateway.query`는 자유 텍스트 하나만 받는다. 필터·정렬·집계는 표현하지 못한다. | 실제 검색 요구가 생기면 포트를 확장하고 계약 테스트를 함께 추가한다. 수요 없이 넓히지 않는다. |
+| 운영 배포 | Helm, Secret 주입, migration job이 없다. dev/prod fail-fast 계약은 설정 해석 수준에서만 검증됐다. | [남은 작업](remaining-work.md) P1-B. |

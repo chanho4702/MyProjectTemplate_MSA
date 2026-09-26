@@ -86,7 +86,7 @@ pnpm api:check
 
 | Method | Path | 성공 | 주요 실패 | 설명 |
 |---|---|---|---|---|
-| GET | `/api/v1/items` | 200 `Item[]` | 401, 500 | read-only service 경로로 목록 조회 |
+| GET | `/api/v1/items?page=0&size=50` | 200 `Item[]` | 400, 401, 500 | read-only 경로로 한 페이지(`size` 1~200, 기본 50)를 생성 시각 내림차순으로 조회. 전체 행을 한 번에 반환하지 않는다 |
 | POST | `/api/v1/items` | 201 `Item` | 400, 401, 500 | 1~120자 name을 writer에 저장 |
 
 dev/prod 계약은 OIDC Bearer JWT를 기술한다. local에서는 Gateway와 SPA의 보안 스위치를 함께 끌 수 있다. Gateway가 만든 401이나 upstream 500은 본문이 없을 수 있으므로 API client는 JSON Problem Detail이 없어도 status와 response request ID를 보존한다.

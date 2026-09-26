@@ -6,9 +6,13 @@
 
 - 기준 브랜치: `main`
 - 2026-08-23에 선택형 생성 마감(P0-A), 실제 IdP 브라우저 E2E(P0-B), 프론트 production image·same-origin ingress(P1-A)까지 커밋했다. 각 검증 결과는 [검증 기록](verification.md)의 2026-08-23 절들에 있다.
+- 2026-08-28에 P0-C를 시도했다. knee/목표 TPS 결정, 인스턴스 제거·reader 장애 실험은 Gateway 경유로 완료했지만, 4시간 soak는 두 차례 모두 같은 PC에서 무관한 다른 마이크로서비스 스택이 함께 실행되며 호스트 CPU를 거의 다 써서(`system_cpu_usage` 평균 85%인데 `process_cpu_usage`는 평균 4%) **무효 처리했다**. 근거와 수치는 [검증 기록](verification.md)의 2026-08-28 절을 본다. P0-C는 여전히 미완료다.
+- 2026-09-26에 `GET /api/v1/items`에 페이지네이션(`page`, `size` 1~200, 기본 50)을 추가하고 OpenAPI 계약·생성 타입·문서를 함께 갱신했다. 쿼리 파라미터 제약 위반은 web starter의 공통 handler가 `VALIDATION_FAILED` Problem Detail로 바꾼다. 2026-08-28까지의 knee·목표 TPS는 무제한 응답 기준이므로 P0-C 재실행 전에 knee probe부터 다시 한다.
+- 2026-09-26에 8월 23일 이후 로컬에만 있던 커밋과 위 변경을 `origin/main`으로 push했다. `generated-service-build`, `oidc-e2e`, `frontend-image-smoke` job의 GitHub Actions 첫 실행 결과는 [검증 기록](verification.md)의 2026-09-26 절에 있다.
 - 커밋과 배포: 사용자가 별도로 요청하기 전에는 수행하지 않는다.
 - 로컬 환경 주의: 시스템 `JAVA_HOME`은 `C:\java11`을 가리키지만 저장소 기준선은 Java 21이다. 검증 전 `$env:JAVA_HOME='C:\Program Files\Java\jdk-21'`을 지정한다.
-- CI의 `generated-service-build`, `oidc-e2e`, `frontend-image-smoke` job은 로컬에서 같은 명령을 검증했지만 GitHub Actions에서의 첫 실행 결과는 아직 관찰하지 않았다. push 뒤 첫 CI 결과를 확인한다.
+- 로컬 환경 주의: 이 PC는 Hyper-V가 `4116-4215`, `8025-8124`, `8286-8385` 등 TCP 포트 범위를 예약해 Vite preview 기본 포트 `4173`과 서비스 기본 포트 `8080-8084`가 막힌다. `pnpm web:e2e`는 `E2E_PORT=14173`처럼 비어 있는 포트를 지정해 실행한다. 예약 범위는 `netsh interface ipv4 show excludedportrange protocol=tcp`로 확인한다.
+- `docs/diagrams/`는 2026-08-28 SHA 기준으로 외부 도구가 생성한 아키텍처·도입 흐름 다이어그램(HTML, JSON, 스크린샷 PNG 8장, 약 2.3MB)이며 아직 추적하지 않는다. 어느 문서도 참조하지 않으므로 문서에 연결해 커밋할지, 삭제할지 사용자가 결정한다.
 
 다음 작업자는 먼저 `git log`와 이 문서의 완료 표시를 검토하고 필요한 검증을 다시 실행한다.
 
@@ -56,15 +60,17 @@ BFF를 구현한다면 추가 완료 조건:
 
 공식 성능 기준선은 코드 변경보다 실행 조건의 신뢰성이 중요하다. 사용자가 커밋을 요청하지 않았다면 준비까지만 하고, dirty tree에서 결과를 공식 기준선으로 기록하지 않는다.
 
-- [ ] 실행할 Git SHA, 작업 트리 상태, CPU·메모리·JVM·DB 사양을 기록한다.
-- [ ] SLO, 목표 TPS와 C1/C2 판정 기준을 실행 전에 정한다.
-- [ ] 10,000건 이상 데이터와 현실적인 GET/POST 비율을 준비한다.
-- [ ] 서비스 직접 호출이 아니라 Gateway 경유 end-to-end 부하를 포함한다.
-- [ ] 최소 4시간 soak에서 p95/p99, 오류율, dropped iteration, CPU, heap/old generation, GC pause, DB pool을 같은 시간대로 수집한다.
-- [ ] 앱 인스턴스 제거와 reader 장애 시 복구 시간·오류율을 별도 결과로 남긴다.
-- [ ] 원본 결과 위치와 Markdown 요약을 [검증 기록](verification.md)에 연결한다.
+- [x] 실행할 Git SHA, 작업 트리 상태, CPU·메모리·JVM·DB 사양을 기록한다. — 2026-08-28, [검증 기록](verification.md)의 P0-C 절.
+- [x] SLO, 목표 TPS와 C1/C2 판정 기준을 실행 전에 정한다. — knee probe로 목표 TPS=8을 확정하고, 2배 TPS(16) 사전 확인에서 C1 미충족을 실행 전에 판정했다.
+- [x] 10,000건 이상 데이터와 현실적인 GET/POST 비율을 준비한다. — 10,002행 벌크 시딩, soak에 `WRITE_RATIO` 옵션 추가(계약 테스트 포함).
+- [x] 서비스 직접 호출이 아니라 Gateway 경유 end-to-end 부하를 포함한다. — knee/실패 실험/soak 모두 Gateway(`18082`) 경유.
+- [ ] 최소 4시간 soak에서 p95/p99, 오류율, dropped iteration, CPU, heap/old generation, GC pause, DB pool을 같은 시간대로 수집한다. — 2026-08-28에 두 차례 4시간을 실제로 실행했지만 같은 PC에서 무관한 다른 컨테이너 스택이 동시에 돌며 호스트 CPU를 거의 다 써서(증거: [검증 기록](verification.md) 2026-08-28 절) **무효 처리**했다. 이 저장소와 무관한 워크로드가 없는 조용한 호스트에서 다시 실행해야 한다.
+- [x] 앱 인스턴스 제거와 reader 장애 시 복구 시간·오류율을 별도 결과로 남긴다. — 목표 TPS(8)에서 각각 완료, [검증 기록](verification.md) 참조. (soak와 달리 90초짜리 짧은 실험이라 호스트 경합 창이 좁아 유효하다고 판단했다.)
+- [ ] 원본 결과 위치와 Markdown 요약을 [검증 기록](verification.md)에 연결한다. — 유효한 4시간 soak가 나온 뒤 마무리.
 
-특정 TPS 또는 C1/C2 충족은 위 근거가 모두 있을 때만 문서에 표시한다.
+특정 TPS 또는 C1/C2 충족은 위 근거가 모두 있을 때만 문서에 표시한다. 이번 실행은 2배 TPS 유지에 실패해 **C1/C2 등급을 주장하지 않는다** — 자세한 근거는 [검증 기록](verification.md)을 본다.
+
+재시도 시 체크리스트: 실행 전 `docker ps`로 이 저장소와 무관한 컨테이너가 없는지 확인하고, 실행 중 5분 간격으로 `system_cpu_usage`와 `process_cpu_usage`를 비교해 호스트 경합이 없는지 같이 기록한다. 2026-09-26 이후 `GET /api/v1/items`는 페이지 응답이므로 knee probe로 목표 TPS를 다시 정한 뒤 soak를 실행하고, `DATASET_DESCRIPTION`에 행 수와 요청 `size`를 함께 적는다.
 
 ## 3. 다음 우선순위
 
@@ -101,6 +107,16 @@ SSR adapter는 실제 SEO·서버 렌더 요구가 확인될 때만 추가한다
 
 현재 reader URL 미설정 시에는 writer로 시작하지만, 실행 중 reader 장애는 writer로 자동 전환하지 않는다. 자동 fallback을 추가할지는 일관성·장애 확산 위험을 비교하는 ADR 없이 결정하지 않는다.
 
+### P1-D. 서비스 생성기와 Gateway route 계약
+
+`gateway-service`의 `application.yml`에는 sample-service route 하나만 있고, 생성기는 새 서비스의 route를 추가하지 않는다. 새 서비스를 만들면 Gateway에 route·circuit breaker instance를 손으로 넣어야 한다.
+
+- [ ] 생성기가 route 조각(`Path` predicate, `uri` 환경변수, circuit breaker instance)을 출력하거나 Gateway 설정에 병합하는 방식을 정한다.
+- [ ] dev/prod에서 서비스 URI가 환경변수로만 주입되고 localhost 기본값이 없음을 계약 테스트한다.
+- [ ] 생성 서비스 빌드 테스트(`pnpm tools:test:generated-build`)에 Gateway 설정 해석을 포함한다.
+
+완료 조건은 생성기로 만든 서비스가 Gateway 설정 변경 없이, 또는 생성기가 만든 조각만 적용해 Gateway 경유 호출이 되는 것이다.
+
 ## 4. 수요가 있을 때만 하는 확장 작업
 
 - OpenSearch adapter
@@ -120,9 +136,11 @@ SSR adapter는 실제 SEO·서버 렌더 요구가 확인될 때만 추가한다
 2. ~~Bash JSON Schema 검증 또는 명시적 검증 계약~~ — 2026-08-23 완료
 3. ~~실제 Keycloak·Gateway 브라우저 E2E~~ — 2026-08-23 완료 (BFF는 필요 확인 시 별도 ADR)
 4. ~~프론트 production image와 same-origin ingress~~ — 2026-08-23 완료 (Kubernetes manifest는 6단계에서)
-5. 깨끗한 SHA 기준 4시간 soak 및 C1/C2 판정
-6. Helm/HPA/PDB/NetworkPolicy와 migration/rollback
-7. 실제 수요가 확인된 adapter 한 개씩
+5. ~~참조 구현 목록 API 페이지네이션과 쿼리 파라미터 검증 계약~~ — 2026-09-26 완료
+6. 깨끗한 SHA 기준 knee 재탐색, 4시간 soak 및 C1/C2 판정
+7. Helm/HPA/PDB/NetworkPolicy와 migration/rollback
+8. 생성기–Gateway route 계약(P1-D)
+9. 실제 수요가 확인된 adapter 한 개씩
 
 각 변경은 코드, 단위/계약 테스트, 문서 예제와 검증 기록을 함께 갱신한다.
 
@@ -174,8 +192,15 @@ docs/remaining-work.md를 먼저 읽어라. 현재 작업 트리의 미커밋 �
 초기화하거나 덮어쓰지 말고 git diff로 검토하라.
 
 P0-A, P0-B(SPA PKCE 브라우저 E2E)와 P1-A(프론트 production image·same-origin
-ingress의 로컬 범위)는 2026-08-23에 완료됐다. 다음 순서는 P0-C(깨끗한 커밋 기준
-4시간 soak — 커밋이 선행되어야 한다) 또는 P1-B(Kubernetes 운영 배포 기반)다.
+ingress의 로컬 범위)는 2026-08-23에 완료됐다. P0-C는 knee/목표 TPS 결정과
+인스턴스 제거·reader 장애 실험까지는 2026-08-28에 완료했지만, 4시간 soak는
+같은 PC의 무관한 다른 컨테이너 스택 때문에 두 차례 모두 무효 처리됐다
+(docs/verification.md의 2026-08-28 절 참고). 2026-09-26에 GET /api/v1/items에
+페이지네이션을 추가했으므로 이전 knee·목표 TPS는 새 코드에 그대로 쓸 수 없다.
+다음 순서는 이 저장소와 무관한 워크로드가 없는 조용한 호스트에서 knee probe로
+목표 TPS를 다시 정하고 P0-C의 4시간 soak를 실행하는 것이다. 그 다음은
+P1-B(Kubernetes 운영 배포 기반)와 P1-D(생성기–Gateway route 계약)다.
+docs/diagrams/는 추적하지 않는 외부 생성물이므로 사용자 결정 전에는 커밋하지 않는다.
 BFF는 실제 요구가 확인될 때만 별도 ADR로 진행한다. 코드·테스트·문서를 함께
 갱신하고, 모든 검증을 Java 21로 실행해 결과를 docs/verification.md에 기록하라.
 커밋과 배포는 별도 요청 전에는 하지 마라.
